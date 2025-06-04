@@ -1,6 +1,6 @@
 # Multi‑Agent System Demo for Judgment Labs
 """
-Self‑contained, multi‑agent workflow instrumented for Judgeval tracing.
+Self‑contained multi‑agent workflow **fully instrumented** for Judgeval.
 
 Agents
 ------
@@ -25,7 +25,7 @@ python3 -m unittest multiagent_system.py
 
 Dependencies
 ~~~~~~~~~~~~
-- openai>=1.25  (official Python SDK v1)
+- openai>=1.25  (Python SDK v1)
 - judgeval>=0.40 (private index)
 - python‑dotenv (optional)
 """
@@ -44,12 +44,12 @@ from typing import List, Dict, Any
 try:
     import openai                                   # >=1.25.0
 except ImportError:
-    sys.exit("openai package not found → `pip install openai`. ")
+    sys.exit("openai package not found → `pip install openai`. ")
 
 try:
     from judgeval.common.tracer import Tracer, wrap # >=0.40
 except ImportError:
-    sys.exit("judgeval SDK missing → `pip install --extra-index-url https://pkg.judgmentlabs.ai/simple judgeval`. ")
+    sys.exit("judgeval SDK missing → `pip install --extra-index-url https://pkg.judgmentlabs.ai/simple judgeval`. ")
 
 # ────────────────────────────────────────────────────────────────────
 # Config
@@ -60,7 +60,8 @@ if not openai_api_key:
 
 openai_model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
-tracer = Tracer(project_name="MultiAgent Demo", deep_tracing=True)
+# **Project name must match what you select in the UI**
+tracer = Tracer(project_name="MultiAgent", deep_tracing=True)
 
 # Wrap an **instance** of the OpenAI client so every request is traced.
 client = wrap(openai.OpenAI(api_key=openai_api_key))
@@ -78,16 +79,15 @@ class Agent:
     def build_prompt(self, user_msg: str, shared: "Memory") -> List[Dict[str, str]]:
         raise NotImplementedError
 
+    # Every agent call becomes a span
+    @tracer.observe(span_type="agent")
     def __call__(self, user_msg: str, shared: "Memory") -> str:
-        # Build the prompt
         prompt = self.build_prompt(user_msg, shared)
-        # Hit the wrapped client (auto‑traced)
         response = client.chat.completions.create(
             model=openai_model,
             messages=prompt,
             temperature=0.7,
         ).choices[0].message.content.strip()
-        # Persist
         self.memory.append({"role": "assistant", "content": response})
         shared.append(self.name, response)
         return response
@@ -166,6 +166,7 @@ class MultiAgentCoordinator:
         self.critic = Critic("Critic")
         self.executor = Executor("Executor")
 
+    @tracer.observe(span_type="function")  # root span
     def run(self, objective: str) -> str:
         # Phase 1: research
         self.researcher(objective, self.memory)
