@@ -1,1 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+# ---- Virtual environments ----
 .venv/
+
+# ---- Env/config files ----
+.env
+*.env
+
+# ---- VS Code fluff ----
+.vscode/
+
+# ---- OS junk ----
+.DS_Store
